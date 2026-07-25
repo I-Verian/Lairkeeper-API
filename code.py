@@ -931,7 +931,7 @@ _UI_ICONS_BG["thread"].start()
 
 
 APP_FONT_FAMILY = "Fredoka SemiBold"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.5.2"
 GITHUB_REPO = "I-Verian/Lairkeeper-API"
 APP_FONT_WEIGHT = "normal"
 
@@ -4935,7 +4935,7 @@ def _version_tuple(v):
 def _clean_tag(raw_tag):
     import re as _re
     cleaned = raw_tag.strip()
-    cleaned = _re.sub(r'(?i)^lairkeeper[\s_-]*', '', cleaned)
+    cleaned = _re.sub(r'(?i)^lairkeeper[\s_-]*(api[\s_-]*)?', '', cleaned)
     cleaned = cleaned.lstrip('vV')
     return cleaned
 
@@ -5489,5 +5489,6 @@ def _start_main_app(root):
 
 if __name__ == "__main__":
     start()
+
 
 
