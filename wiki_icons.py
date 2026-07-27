@@ -258,6 +258,7 @@ MISC_ICON_FILES = {
     "Age": "age.png",
     "Male Icon": "male.png",
     "Female Icon": "female.png",
+    "Soul Bound Icon": "soulbound.png",
 }
 
 MENUICON_FILES = {
@@ -623,4 +624,5 @@ if __name__ == "__main__":
         traits=data["COSMETIC_TRAIT_LIST"][:10],
         verbose=True,
     )
+
 

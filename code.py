@@ -16,7 +16,7 @@ import uuid
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import messagebox, ttk
-from PIL import Image, ImageTk, ImageDraw, ImageOps, ImageChops
+from PIL import Image, ImageTk, ImageDraw, ImageOps, ImageChops, ImageGrab
 
 import wiki_data
 _WIKI_BG = {"thread": None, "data": None}
@@ -931,7 +931,7 @@ _UI_ICONS_BG["thread"].start()
 
 
 APP_FONT_FAMILY = "Fredoka SemiBold"
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.6.0"
 GITHUB_REPO = "I-Verian/Lairkeeper-API"
 APP_FONT_WEIGHT = "normal"
 
@@ -1826,7 +1826,7 @@ def show_details(parent, container, name, refresh_grid=None, active_tab=None):
         w.destroy()
 
     viewport = container.master if isinstance(container.master, tk.Canvas) else container
-    avail_w = viewport.winfo_width() or 640
+    avail_w = max(1, (viewport.winfo_width() or 640) - 40)
     compact = global_settings.get("CompactMode", False)
     scale = 1.0 if compact else max(0.8, min(2.4, avail_w / 640))
 
@@ -3436,7 +3436,7 @@ def open_lair(root, account):
         center(win, 830, 880)
         win.minsize(640, 460)
     else:
-        center(win, 1100, 850)
+        center(win, 1170, 850)
         win.minsize(760, 520)
 
     def back_to_accounts():
@@ -4043,19 +4043,21 @@ def custom_dragon_image_path(dragon_id):
     return os.path.join(DRAGON_IMAGES_DIR, f"{dragon_id}.png")
 
 
-def import_dragon_custom_image(source_path, dragon_id):
+def import_dragon_custom_image(source, dragon_id):
     """Copies and resizes a user-chosen image into assets/dragon_images/
-    at a consistent 200x200 max, preserving transparency. Returns the
-    destination path, or None on failure."""
+    at a consistent 200x200 max, preserving transparency. `source` can be
+    a file path (str) or an already-loaded PIL Image (e.g. from a
+    clipboard paste). Returns the destination path, or None on failure."""
     try:
-        img = Image.open(source_path).convert("RGBA")
+        img = source if isinstance(source, Image.Image) else Image.open(source)
+        img = img.convert("RGBA")
         img = autocrop_to_content(img)
         img.thumbnail((200, 200), Image.LANCZOS)
         dest = custom_dragon_image_path(dragon_id)
         img.save(dest, "PNG", optimize=True)
         return dest
     except Exception as e:
-        print(f"[custom icon] Failed to import {source_path}: {e}")
+        print(f"[custom icon] Failed to import {source!r}: {e}")
         return None
 
 
@@ -4458,6 +4460,7 @@ def labeled_combo(parent, label_text, values, default=None):
 def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
     editing = dragon_id is not None
     d = dragons.get(dragon_id, {}) if editing else {}
+    pending_id = dragon_id if editing else uuid.uuid4().hex[:10]
 
     form = tk.Toplevel(parent_win)
     form.title("Edit Dragon" if editing else "Add New Dragon")
@@ -4520,7 +4523,7 @@ def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
     preview_canvas = tk.Canvas(img_row, width=100, height=100, bg=PALETTE["bg_outer"], highlightthickness=0)
     preview_canvas.pack(side="left", padx=(0, 12))
 
-    has_custom_icon = {"val": os.path.exists(custom_dragon_image_path(dragon_id or ""))}
+    has_custom_icon = {"val": os.path.exists(custom_dragon_image_path(pending_id))}
 
     def update_preview():
         preview_canvas.delete("all")
@@ -4548,15 +4551,52 @@ def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
             filetypes=[("Image files", "*.png *.jpg *.jpeg *.gif")])
         if not path:
             return
-        temp_id = dragon_id or uuid.uuid4().hex[:10]
+        temp_id = pending_id
         result = import_dragon_custom_image(path, temp_id)
         if result:
             has_custom_icon["val"] = True
             update_preview()
             custom_label.config(text="Custom icon set")
 
+    def paste_custom_icon(_event=None):
+        if _event is not None:
+            focused = img_row.winfo_toplevel().focus_get()
+            if isinstance(focused, (tk.Entry, tk.Text)):
+                return
+        try:
+            clip = ImageGrab.grabclipboard()
+        except Exception as e:
+            messagebox.showwarning("Paste failed", f"Couldn't read the clipboard: {e}", parent=img_row.winfo_toplevel())
+            return
+        if clip is None:
+            messagebox.showinfo("Nothing to paste",
+                                 "No image found on the clipboard. Copy an image "
+                                 "(e.g. a screenshot, or an image from a browser) first.",
+                                 parent=img_row.winfo_toplevel())
+            return
+        if isinstance(clip, list):
+            if not clip:
+                messagebox.showinfo("Nothing to paste", "No image found on the clipboard.",
+                                     parent=img_row.winfo_toplevel())
+                return
+            clip = clip[0]
+            if isinstance(clip, str) and os.path.isfile(clip):
+                temp_id = pending_id
+                result = import_dragon_custom_image(clip, temp_id)
+                if result:
+                    has_custom_icon["val"] = True
+                    update_preview()
+                    custom_label.config(text="Custom icon set")
+                return
+        temp_id = pending_id
+        result = import_dragon_custom_image(clip, temp_id)
+        if result:
+            has_custom_icon["val"] = True
+            update_preview()
+            custom_label.config(text="Custom icon set")
+
     def clear_custom_icon():
-        p = custom_dragon_image_path(dragon_id or "")
+        p = custom_dragon_image_path(pending_id)
         if os.path.exists(p):
             try:
                 os.remove(p)
@@ -4569,6 +4609,9 @@ def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
     tk.Button(icon_btn_col, text="Upload Icon…", command=browse_custom_icon,
                bg=PALETTE["tag_fill"], fg="white", relief="flat",
                font=(APP_FONT_FAMILY, 9, APP_FONT_WEIGHT), pady=4).pack(fill="x", pady=(0, 4))
+    tk.Button(icon_btn_col, text="Paste Icon (Ctrl+V)", command=paste_custom_icon,
+               bg=PALETTE["tag_fill"], fg="white", relief="flat",
+               font=(APP_FONT_FAMILY, 9, APP_FONT_WEIGHT), pady=4).pack(fill="x", pady=(0, 4))
     tk.Button(icon_btn_col, text="Clear Custom", command=clear_custom_icon,
                bg=PALETTE["row_fill"], fg="white", relief="flat",
                font=(APP_FONT_FAMILY, 9, APP_FONT_WEIGHT), pady=4).pack(fill="x")
@@ -4577,6 +4620,9 @@ def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
                              fg=PALETTE["label_text"], bg=PALETTE["bg_outer"],
                              font=(APP_FONT_FAMILY, 8), wraplength=120, justify="left")
     custom_label.pack(anchor="w", pady=(6, 0))
+    _paste_toplevel = img_row.winfo_toplevel()
+    _paste_toplevel.bind("<Control-v>", paste_custom_icon)
+    _paste_toplevel.bind("<Control-V>", paste_custom_icon)
 
     nickname_var = labeled_entry(body, "Nickname", default=d.get("Nickname", ""))
 
@@ -4797,7 +4843,7 @@ def open_dragon_form(parent_win, refresh_callback, dragon_id=None):
                                     "Type a username, or turn this off.")
             return
 
-        new_id = dragon_id if editing else uuid.uuid4().hex[:10]
+        new_id = pending_id
         gen_text = generation_var.get().strip()
         if gen_text.lstrip("-").isdigit():
             generation = max(1, int(gen_text))
