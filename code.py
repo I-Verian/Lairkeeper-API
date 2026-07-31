@@ -815,12 +815,14 @@ MUTATION_CAP = 5
 GENDER_LIST = ["Male", "Female"]
 SDA_EXCLUDED_FALLBACK = {
     'Flame',
+    'Great Devourer',
     'Mountain Dragon',
     'Riyu',
     'Rocky',
     'Shard',
     'Source Dragon of Energy',
     'Source Dragon of Motion',
+    'Ultra Dragon',
     'Wisp',
 }
 SDA_EXCLUDED = set(SDA_EXCLUDED_FALLBACK)
@@ -931,7 +933,7 @@ _UI_ICONS_BG["thread"].start()
 
 
 APP_FONT_FAMILY = "Fredoka SemiBold"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.6.1"
 GITHUB_REPO = "I-Verian/Lairkeeper-API"
 APP_FONT_WEIGHT = "normal"
 
@@ -2504,7 +2506,7 @@ def open_sda_tracker(parent_win):
         return "#8B1A1A"
 
     total = sum(1 for s in SPECIES_LIST if s not in SDA_EXCLUDED)
-    owned_count = sum(1 for s in SPECIES_LIST if s in owned_species)
+    owned_count = sum(1 for s in SPECIES_LIST if s in owned_species and s not in SDA_EXCLUDED)
     sda_count = sum(1 for s in SPECIES_LIST
                     if best_mutations.get(s, 0) >= 5 and s not in SDA_EXCLUDED)
 
@@ -2565,15 +2567,15 @@ def open_sda_tracker(parent_win):
         name_font_size = max(9, min(13, cell_w // 18))
         badge_font_size = max(7, name_font_size - 2)
 
-        for idx, species in enumerate(SPECIES_LIST):
+        visible_species = [s for s in SPECIES_LIST if s not in SDA_EXCLUDED]
+        for idx, species in enumerate(visible_species):
             row_i = idx // cols
             col_i = idx % cols
 
             is_owned = species in owned_species
-            is_excluded = species in SDA_EXCLUDED
-            sp_mut = best_mutations.get(species, 0) if not is_excluded else None
+            sp_mut = best_mutations.get(species, 0)
 
-            icon_species = "Riyu" if species == "Mountain Dragon" else species
+            icon_species = species
 
             cell = tk.Canvas(grid_frame, width=cell_w, height=cell_h,
                               bg=PALETTE["panel_fill"], highlightthickness=0)

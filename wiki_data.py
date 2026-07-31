@@ -435,18 +435,25 @@ def fetch_category_members(category, namespace=0, limit=500):
     return titles
 
 
+SPECIES_CATEGORY_JUNK = {
+    "Baby Dragons",
+}
+
+
 def load_species(with_rarity=True):
     """
     Returns (SPECIES_LIST, SPECIES_RARITY_dict). Species names come from
     Category:Dragons page titles (one wiki page per dragon), which is much
-    more reliable than trying to parse a single giant table.
+    more reliable than trying to parse a single giant table. A few known
+    non-species pages (galleries, category-organization pages) get tagged
+    under this category by mistake on the wiki and are filtered out here.
 
     If with_rarity=True, this also opens each species' own page and pulls
     a "Rarity" value out of its infobox - that's one extra API call per
     species (~200+ calls), so it's slower. Set with_rarity=False for a
     quick species-name-only run.
     """
-    species = sorted(fetch_category_members("Dragons"))
+    species = sorted(m for m in fetch_category_members("Dragons") if m not in SPECIES_CATEGORY_JUNK)
     rarity = {}
     if with_rarity:
         for name in species:
@@ -752,4 +759,5 @@ if __name__ == "__main__":
         import json
         print("\n--- FULL OUTPUT ---")
         print(json.dumps(data, indent=2, ensure_ascii=False))
+
 
