@@ -933,7 +933,7 @@ _UI_ICONS_BG["thread"].start()
 
 
 APP_FONT_FAMILY = "Fredoka SemiBold"
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 GITHUB_REPO = "I-Verian/Lairkeeper-API"
 APP_FONT_WEIGHT = "normal"
 
@@ -1554,9 +1554,15 @@ def setup_ttk_style(root):
 
 def bind_mousewheel(canvas):
     """Scroll `canvas` on mouse wheel, but only while the cursor is over it —
-    keeps separate scrollable windows from stealing each other's scrolling."""
+    keeps separate scrollable windows from stealing each other's scrolling.
+    Uses a small explicit scroll increment (20px/unit, 2 units per wheel
+    click = 40px) instead of Tkinter's default unit size, which can be
+    quite coarse and make fast-scrolled text look like it's jumping/
+    blurring together rather than scrolling smoothly."""
+    canvas.configure(yscrollincrement=20)
+
     def _scroll(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.yview_scroll(int(-2 * (event.delta / 120)), "units")
 
     def _on_enter(_event):
         canvas.bind_all("<MouseWheel>", _scroll)
@@ -1830,7 +1836,7 @@ def show_details(parent, container, name, refresh_grid=None, active_tab=None):
     viewport = container.master if isinstance(container.master, tk.Canvas) else container
     avail_w = max(1, (viewport.winfo_width() or 640) - 40)
     compact = global_settings.get("CompactMode", False)
-    scale = 1.0 if compact else max(0.8, min(2.4, avail_w / 640))
+    scale = 1.0 if compact else max(0.4, min(2.4, avail_w / 640))
 
     def F(n):
         return max(7, round(n * scale))
@@ -1838,7 +1844,7 @@ def show_details(parent, container, name, refresh_grid=None, active_tab=None):
     def S(n):
         return round(n * scale)
 
-    W = 380 if compact else S(640)
+    W = min(380, avail_w) if compact else S(640)
     is_traits_expanded = genetic_traits_expanded.get(name, False)
     is_note_expanded = note_expanded.get(name, False)
     has_note = bool(d.get("Note", "").strip())
@@ -3136,8 +3142,56 @@ def open_quick_add(parent_win, refresh_callback):
             refresh_callback()
         dlg.destroy()
 
+    def do_full_preview():
+        raw = txt.get("1.0", "end-1c").strip()
+        if not raw:
+            messagebox.showwarning("Empty", "Enter dragon info first.", parent=dlg)
+            return
+        d, _v = parse_quick_dragon(raw)
+        if not d["Species"]:
+            messagebox.showwarning("Missing species", "Line 2 must be a species name.", parent=dlg)
+            return
+
+        preview_key = "__quick_add_preview__"
+        dragons[preview_key] = d
+
+        preview_win = tk.Toplevel(dlg)
+        preview_win.title(f"Preview — {d['Nickname']}")
+        preview_win.configure(bg=PALETTE["lair_bg"])
+        center(preview_win, 700, 780)
+        preview_win.minsize(400, 400)
+
+        def on_preview_close():
+            dragons.pop(preview_key, None)
+            preview_win.destroy()
+
+        preview_win.protocol("WM_DELETE_WINDOW", on_preview_close)
+
+        outer = tk.Frame(preview_win, bg=PALETTE["lair_bg"])
+        outer.pack(fill="both", expand=True)
+        pv_canvas = tk.Canvas(outer, bg=PALETTE["lair_bg"], highlightthickness=0)
+        pv_canvas.pack(side="left", fill="both", expand=True)
+        pv_vscroll = tk.Scrollbar(outer, orient="vertical", command=pv_canvas.yview)
+        pv_vscroll.pack(side="right", fill="y")
+        pv_canvas.configure(yscrollcommand=pv_vscroll.set)
+        bind_mousewheel(pv_canvas)
+
+        pv_inner = tk.Frame(pv_canvas, bg=PALETTE["lair_bg"])
+        pv_window_id = pv_canvas.create_window((0, 0), window=pv_inner, anchor="nw")
+
+        def _sync_preview(_e=None):
+            canvas_w = pv_canvas.winfo_width()
+            content_w = pv_inner.winfo_reqwidth()
+            pv_canvas.itemconfig(pv_window_id, width=max(canvas_w, content_w))
+            pv_canvas.configure(scrollregion=pv_canvas.bbox("all"))
+
+        pv_canvas.bind("<Configure>", _sync_preview)
+        pv_inner.bind("<Configure>", _sync_preview)
+
+        show_details(preview_win, pv_inner, preview_key, refresh_grid=None, active_tab=None)
+
     txt.bind("<KeyRelease>", lambda _e: do_parse())
-    tk.Button(btn_row, text="Preview", command=do_parse,
+    tk.Button(btn_row, text="Preview", command=do_full_preview,
                bg=PALETTE["tag_fill"], fg="white", relief="flat",
                font=(APP_FONT_FAMILY, 10, APP_FONT_WEIGHT), padx=16, pady=6).pack(side="left", padx=8)
     tk.Button(btn_row, text="Add Dragon", command=do_add,
@@ -3784,22 +3838,16 @@ def open_lair(root, account):
     right_canvas.grid(row=0, column=0, sticky="nsew")
     right_vscroll = tk.Scrollbar(right_outer, orient="vertical", command=right_canvas.yview)
     right_vscroll.grid(row=0, column=1, sticky="ns")
-    right_hscroll = tk.Scrollbar(right_outer, orient="horizontal", command=right_canvas.xview)
-    right_hscroll.grid(row=1, column=0, sticky="ew")
-    right_canvas.configure(yscrollcommand=right_vscroll.set, xscrollcommand=right_hscroll.set)
+    right_canvas.configure(yscrollcommand=right_vscroll.set)
     bind_mousewheel(right_canvas)
 
     right = tk.Frame(right_canvas, bg=PALETTE["lair_bg"])
     right_window_id = right_canvas.create_window((0, 0), window=right, anchor="nw")
+
     def _sync_right_width(_e=None):
         canvas_w = right_canvas.winfo_width()
-        content_w = right.winfo_reqwidth()
-        right_canvas.itemconfig(right_window_id, width=max(canvas_w, content_w))
+        right_canvas.itemconfig(right_window_id, width=canvas_w)
         right_canvas.configure(scrollregion=right_canvas.bbox("all"))
-        if content_w > canvas_w:
-            right_hscroll.grid(row=1, column=0, sticky="ew")
-        else:
-            right_hscroll.grid_remove()
 
     right_canvas.bind("<Configure>", _sync_right_width)
     right.bind("<Configure>", _sync_right_width)
