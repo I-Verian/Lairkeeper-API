@@ -1,31 +1,3 @@
-"""
-wiki_icons.py
--------------
-Downloads real icon images from the Dragon Adventures Fandom wiki and saves
-them into the exact local filenames your app's existing icon_path() helper
-functions already search for (element_icon_path, cosmetic_trait_icon_path,
-species_icon_path). That means the DRAWING code in code.py doesn't change
-at all - it already knows how to find and use a PNG once it's on disk. This
-module's only job is to put the right PNG in the right place, sourced from
-the wiki instead of you hand-placing files.
-
-Only species, elements, and cosmetic traits get per-item icons drawn
-anywhere in the app (checked against code.py) - materials and pupils are
-text-only, so there's nothing to fetch icons for there.
-
-USAGE:
-    import wiki_icons
-    wiki_icons.download_all_icons(
-        icon_dir="assets/icons",                     # element_icon_path's ICON_DIR
-        dragon_icons_dir="assets/dragonicons",        # species_icon_path's DRAGON_ICONS_DIR
-        cosmetic_trait_icon_dir="assets/misc/cosmetictrait",  # COSMETIC_TRAIT_ICON_DIR
-        species_list=SPECIES_LIST,                    # from wiki_data.load_all()
-    )
-
-Already-downloaded icons are skipped on future runs (checked by filename
-existing on disk) - so this stays cheap to call on every launch, and only
-does real work the first time or when something new shows up on the wiki.
-"""
 
 import os
 import re
@@ -47,11 +19,6 @@ def _chunks(seq, size=50):
 
 
 def resolve_file_urls(filenames, width=128):
-    """
-    Given a list of File: page names (e.g. "Fire Element.png"), return
-    {filename: url} using the MediaWiki imageinfo API, batched 50 at a
-    time (the API's per-request title limit for normal users).
-    """
     urls = {}
     clean_names = [f if f.lower().startswith(("file:", "image:")) else f"File:{f}" for f in filenames]
     for batch in _chunks(clean_names, 50):
@@ -76,12 +43,6 @@ def resolve_file_urls(filenames, width=128):
 
 
 def resolve_page_thumbnails(titles, size=128):
-    """
-    Given wiki page titles (e.g. dragon species names, one page per
-    dragon), return {title: thumbnail_url} using prop=pageimages, which
-    gives the page's main/infobox image directly - no filename-guessing
-    needed. Batched 50 at a time.
-    """
     urls = {}
     for batch in _chunks(list(titles), 50):
         params = {
@@ -104,8 +65,6 @@ def resolve_page_thumbnails(titles, size=128):
 
 
 def _best_img_url(img_tag):
-    """Fandom lazy-loads images, so the real URL is usually in data-src,
-    not src (src is often a placeholder). Prefer data-src."""
     if img_tag is None:
         return None
     for attr in ("data-src", "src"):
@@ -124,14 +83,6 @@ def _download(url, dest_path):
 
 
 def _download_many(jobs, max_workers=10, verbose=True, label="icons", on_progress=None):
-    """
-    jobs: list of (name, url, dest_path) tuples. Downloads them in
-    parallel (default 10 at a time) instead of one-by-one.
-
-    on_progress(done, total), if given, is called after each individual
-    download finishes (success or failure) - lets a caller show a live
-    counter instead of a static "please wait" message.
-    """
     saved = 0
     failed = []
     total = len(jobs)
@@ -153,13 +104,6 @@ def _download_many(jobs, max_workers=10, verbose=True, label="icons", on_progres
 
 
 def element_icon_filenames():
-    """
-    For each element, find the gallery image captioned "Current design"
-    (falling back to "Design", then whichever image comes first) inside
-    that element's {{NElement|...}}/{{EElement|...}}/{{SElement|...}}/
-    {{OElement|...}} block on the Elements page wikitext.
-    Returns {element_name: wiki_filename}.
-    """
     wikitext = wd.fetch_wikitext("Elements")
     template_re = re.compile(r"\{\{(?:NElement|EElement|SElement|OElement)\b")
     starts = [m.start() for m in template_re.finditer(wikitext)]
@@ -191,11 +135,6 @@ def element_icon_filenames():
 
 
 def cosmetic_trait_icon_urls():
-    """
-    From the "Cosmetic Traits" section of the Traits page: for each row,
-    read the real image URL straight out of the Icon column's <img> tag
-    (data-src, since Fandom lazy-loads). Returns {trait_name: url}.
-    """
     soup = wd._soup(wd.fetch_html("Traits"))
     urls = {}
     for table in wd._tables_in_section(soup, "Cosmetic Traits"):
@@ -225,15 +164,6 @@ FREDOKA_FONT_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/fred
 
 
 def download_fredoka_font(fonts_dir, verbose=True):
-    """
-    Downloads the Fredoka variable font from Google's official font
-    repository if it's not already present, so it doesn't need to be
-    manually dropped into assets/fonts. This is a single variable font
-    file covering weights 300-700 with named instances (Light, Regular,
-    Medium, SemiBold, Bold) baked in - confirmed directly against the
-    font's fvar table. On Windows 10/11, once registered, each named
-    instance becomes separately selectable by name, e.g. "Fredoka SemiBold".
-    """
     os.makedirs(fonts_dir, exist_ok=True)
     dest = os.path.join(fonts_dir, "Fredoka-Variable.ttf")
     if os.path.exists(dest):
@@ -271,13 +201,6 @@ MENUICON_FILES = {
 
 
 def ensure_ico(png_path, ico_path, verbose=True):
-    """
-    Converts a PNG into a multi-resolution .ico, caching the result (skip
-    if already done). Needed because Tkinter's iconphoto() alone doesn't
-    reliably set the Windows title-bar-corner icon - iconbitmap() with a
-    real .ico file is the fix, so this makes one available at runtime
-    from the wiki-sourced dragonhead.png.
-    """
     if os.path.exists(ico_path):
         return ico_path
     if not os.path.exists(png_path):
@@ -297,14 +220,6 @@ def ensure_ico(png_path, ico_path, verbose=True):
 
 
 def download_ui_icons(misc_dir, menuicons_dir, verbose=True, on_progress=None):
-    """
-    Downloads the app-chrome icons from their real wiki filenames (found
-    directly on the wiki's Lair page) into the two directories and exact
-    local filenames the app's UI code actually looks them up by. Some
-    wiki files (like Happy Icon) get saved to two different destinations
-    under two different local names, since the app uses the same source
-    image for two different buttons.
-    """
     os.makedirs(misc_dir, exist_ok=True)
     os.makedirs(menuicons_dir, exist_ok=True)
 
@@ -354,11 +269,6 @@ def download_ui_icons(misc_dir, menuicons_dir, verbose=True, on_progress=None):
 
 
 def legendary_shift_icon_filenames():
-    """
-    Same approach as element_icon_filenames(), but grabs the gallery image
-    captioned "Legendary shift" (case varies - "Legendary Shift" appears
-    too) instead of "Current design". Returns {element_name: wiki_filename}.
-    """
     wikitext = wd.fetch_wikitext("Elements")
     template_re = re.compile(r"\{\{(?:NElement|EElement|SElement|OElement)\b")
     starts = [m.start() for m in template_re.finditer(wikitext)]
@@ -387,8 +297,6 @@ def legendary_shift_icon_filenames():
 
 
 def download_legendary_shift_icons(legendary_shift_dir, elements=None, verbose=True, on_progress=None):
-    """Saves to <legendary_shift_dir>/<element_lower_with_underscores>.png,
-    matching legendary_shift_path()'s exact naming convention."""
     os.makedirs(legendary_shift_dir, exist_ok=True)
     name_to_file = legendary_shift_icon_filenames()
     if elements:
@@ -414,12 +322,6 @@ def download_legendary_shift_icons(legendary_shift_dir, elements=None, verbose=T
 
 
 def potion_icon_urls():
-    """
-    Real image URL straight out of the Icon column's <img> tag (data-src,
-    since Fandom lazy-loads), scoped to the Special Element Potions
-    section only. Returns {potion_name: url}, name already stripped of
-    the trailing "Potion" word to match load_special_element_potions().
-    """
     soup = wd._soup(wd.fetch_html("Potions"))
     scope = wd.html_section(soup, "Special Element Potions")
     urls = {}
@@ -450,7 +352,6 @@ def potion_icon_urls():
 
 
 def download_potion_icons(potion_icon_dir, potions=None, verbose=True, on_progress=None):
-    """Saves to <potion_icon_dir>/<potion_lower_with_underscores>.png."""
     os.makedirs(potion_icon_dir, exist_ok=True)
     urls_by_name = potion_icon_urls()
     if potions:
@@ -533,8 +434,6 @@ def _prepare_cosmetic_trait_jobs(cosmetic_trait_icon_dir, traits=None, verbose=T
 
 
 def download_element_icons(icon_dir, elements=None, verbose=True, on_progress=None):
-    """Saves to <icon_dir>/<element_lower_with_underscores>.png, matching
-    element_icon_path()'s exact naming convention."""
     dest_paths, jobs = _prepare_element_jobs(icon_dir, elements, verbose)
     if jobs:
         saved, _ = _download_many(jobs, verbose=verbose, label="element", on_progress=on_progress)
@@ -544,8 +443,6 @@ def download_element_icons(icon_dir, elements=None, verbose=True, on_progress=No
 
 
 def download_species_icons(dragon_icons_dir, species_list, verbose=True, on_progress=None):
-    """Saves to <dragon_icons_dir>/<Species>_Icon.png, matching one of
-    species_icon_path()'s candidate filenames exactly."""
     dest_paths, jobs = _prepare_species_jobs(dragon_icons_dir, species_list, verbose)
     if jobs:
         saved, _ = _download_many(jobs, verbose=verbose, label="species", on_progress=on_progress)
@@ -555,8 +452,6 @@ def download_species_icons(dragon_icons_dir, species_list, verbose=True, on_prog
 
 
 def download_cosmetic_trait_icons(cosmetic_trait_icon_dir, traits=None, verbose=True, on_progress=None):
-    """Saves to <cosmetic_trait_icon_dir>/<trait_lower_with_underscores>_icon.png,
-    matching cosmetic_trait_icon_path()'s exact naming convention."""
     dest_paths, jobs = _prepare_cosmetic_trait_jobs(cosmetic_trait_icon_dir, traits, verbose)
     if jobs:
         saved, _ = _download_many(jobs, verbose=verbose, label="cosmetic trait", on_progress=on_progress)
@@ -568,16 +463,6 @@ def download_cosmetic_trait_icons(cosmetic_trait_icon_dir, traits=None, verbose=
 def download_all_icons(icon_dir, dragon_icons_dir, cosmetic_trait_icon_dir,
                         species_list, elements=None, traits=None, verbose=True,
                         on_progress=None):
-    """
-    Fetches/updates icons for elements, species, and cosmetic traits in one
-    combined batch (not three separate ones), so on_progress(done, total)
-    reports one accurate running count across everything - e.g. for a
-    splash screen showing "Downloading icons... 214/450".
-
-    Safe to call on every app launch - already-downloaded icons are
-    skipped (checked by file existing on disk), so repeat calls are fast
-    and only fetch what's actually new.
-    """
     dest_paths = {"elements": {}, "species": {}, "cosmetic_traits": {}}
     all_jobs = []
 
@@ -624,5 +509,7 @@ if __name__ == "__main__":
         traits=data["COSMETIC_TRAIT_LIST"][:10],
         verbose=True,
     )
+
+
 
 

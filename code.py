@@ -854,7 +854,6 @@ ELEMENT_COLOR_OVERRIDES = {
 
 
 def element_hash_color(name):
-    """Deterministic fallback color for any element without a hand-picked one."""
     h = int(hashlib.md5(name.encode("utf-8")).hexdigest(), 16)
     hue = (h % 360) / 360.0
     sat = 0.55 + ((h // 360) % 30) / 100.0
@@ -868,15 +867,12 @@ def get_element_color(name):
 
 
 def get_color_hex(name, element=None):
-    """Resolve a Color dropdown value to a hex. 'Legendary' dynamically
-    matches the dragon's element instead of having one fixed color."""
     if name == "Legendary" and element:
         return get_element_color(element)
     return COLOR_HEX_MAP.get(name, "#777777")
 
 
 def readable_text_color(hex_color):
-    """Pick black or white text so it stays legible on any pill/swatch color."""
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
@@ -933,20 +929,12 @@ _UI_ICONS_BG["thread"].start()
 
 
 APP_FONT_FAMILY = "Fredoka SemiBold"
-APP_VERSION = "1.6.2"
+APP_VERSION = "1.6.3"
 GITHUB_REPO = "I-Verian/Lairkeeper-API"
 APP_FONT_WEIGHT = "normal"
 
 
 def load_custom_fonts():
-    """Privately registers any .ttf/.otf files in assets/fonts/ for this
-    process only (Windows) — so a custom font like Ultima Black works even
-    on a machine that doesn't have it actually installed, as long as the
-    font file is dropped in that folder. Writes what happened to both the
-    console AND a font_debug.log next to the script/exe, since a missing or
-    misnamed font fails completely silently otherwise — and if you're
-    running the packaged --windowed .exe, there's no console to see prints
-    in at all, so the log file is the only way to actually check."""
     lines = []
 
     def log(msg):
@@ -997,9 +985,6 @@ def load_custom_fonts():
 
 
 def fit_text_size(text, family, max_size, min_size, max_width, weight=APP_FONT_WEIGHT):
-    """Shrinks the font size (down to min_size) until `text` measures within
-    max_width in this family/weight — keeps long dragon names from spilling
-    past their available space instead of just clipping or overlapping."""
     size = max_size
     while size > min_size:
         try:
@@ -1049,8 +1034,6 @@ def species_icon_path(species):
 
 
 def migrate_dragon(d):
-    """Upgrade an entry saved by an older version of this script
-    (Patterns/Finish field names, no Generation, etc.) in place."""
     if "Colors" not in d and "Patterns" in d:
         d["Colors"] = d.pop("Patterns")
     if "Materials" not in d or isinstance(d.get("Materials"), list):
@@ -1186,8 +1169,6 @@ def save_themes(account_name, themes_dict):
 
 
 def _write_account(account_name, dragon_dict, tabs_dict):
-    """Write all files for one account: one JSON per dragon + one tabs file.
-    Also removes orphaned dragon files that no longer exist in dragon_dict."""
     adir = _account_dir(account_name)
     os.makedirs(adir, exist_ok=True)
 
@@ -1219,7 +1200,6 @@ def _write_account(account_name, dragon_dict, tabs_dict):
 
 
 def _read_account(account_name):
-    """Read all dragon files + tabs for one account. Returns (dragon_dict, tabs_dict)."""
     adir = _account_dir(account_name)
     dragon_dict = {}
     tabs_dict = {}
@@ -1249,8 +1229,6 @@ def _read_account(account_name):
 
 
 def _migrate_from_legacy():
-    """If the old monolithic dragons_data.json exists and the new data/
-    directory doesn't, convert everything across and rename the old file."""
     if not os.path.exists(DATA_FILE):
         return
     if os.path.exists(DATA_DIR):
@@ -1409,15 +1387,6 @@ def center(win, w, h):
 
 
 def set_window_icon(win):
-    """
-    Sets the window icon from the wiki-sourced dragonhead files. Uses
-    BOTH iconbitmap (a real .ico) and iconphoto (a PNG) because on
-    Windows, iconphoto alone reliably sets the taskbar/Alt-Tab icon but
-    NOT the actual title-bar-corner icon - that one needs the older
-    iconbitmap call with a genuine .ico file, or it silently falls back
-    to Python's own default icon. default=True on both makes this the
-    default for every Toplevel opened afterward too. No-ops quietly if
-    a file isn't there yet (e.g. still downloading)."""
     ico_path = os.path.join(MISC_DIR, "dragonhead.ico")
     if sys.platform == "win32" and os.path.exists(ico_path):
         try:
@@ -1434,7 +1403,6 @@ def set_window_icon(win):
 
 
 def lighten(hex_color, amount=18):
-    """Positive amount lightens, negative amount darkens."""
     hex_color = hex_color.lstrip("#")
     r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
     r, g, b = (max(0, min(255, c + amount)) for c in (r, g, b))
@@ -1442,7 +1410,6 @@ def lighten(hex_color, amount=18):
 
 
 def round_rect(canvas, x1, y1, x2, y2, r=18, **kwargs):
-    """Draw a rounded rectangle on a Canvas using a smoothed polygon."""
     r = min(r, abs(x2 - x1) / 2, abs(y2 - y1) / 2)
     points = [
         x1 + r, y1,
@@ -1462,15 +1429,6 @@ def round_rect(canvas, x1, y1, x2, y2, r=18, **kwargs):
 
 
 def draw_capsule(canvas, x1, y1, x2, y2, **kwargs):
-    """
-    Draws a true pill/capsule shape (two perfect semicircle end-caps +
-    a rectangle) using ovals and a rectangle, instead of round_rect's
-    smoothed polygon - guaranteed geometrically symmetric left-to-right,
-    unlike a smoothed polygon which can render the seam corner slightly
-    differently from the others. Used specifically where symmetry
-    matters most (small pills), not a wholesale replacement for
-    round_rect everywhere.
-    """
     h = y2 - y1
     r = h / 2
     canvas.create_oval(x1, y1, x1 + h, y2, **kwargs)
@@ -1479,8 +1437,6 @@ def draw_capsule(canvas, x1, y1, x2, y2, **kwargs):
 
 
 def outline_text(canvas, x, y, text, font, fill, outline, **kwargs):
-    """Cheap text-stroke effect: draw the outline color offset in 8 directions,
-    then the real fill on top, for that chunky game-font look."""
     offsets = [(-2, 0), (2, 0), (0, -2), (0, 2),
                (-1, -1), (1, 1), (-1, 1), (1, -1)]
     for dx, dy in offsets:
@@ -1490,7 +1446,6 @@ def outline_text(canvas, x, y, text, font, fill, outline, **kwargs):
 
 
 def shadowed_name_text(canvas, x, y, text, font, **kwargs):
-    """Dragon-name styling: a drop shadow behind a stroked, filled title."""
     shadow_dx, shadow_dy = 3, 3
     canvas.create_text(x + shadow_dx, y + shadow_dy, text=text, font=font,
                         fill=PALETTE["name_shadow"], **kwargs)
@@ -1508,7 +1463,6 @@ def draw_star(canvas, cx, cy, r, fill, outline):
 
 
 def draw_bar(canvas, x, y, w, h, value, max_value, text=None):
-    """Glowing rounded stat bar a-la Dragon Adventures."""
     round_rect(canvas, x, y, x + w, y + h, r=h / 2,
                 fill=PALETTE["bar_track"], outline=PALETTE["bar_border"], width=2)
 
@@ -1553,12 +1507,6 @@ def setup_ttk_style(root):
 
 
 def bind_mousewheel(canvas):
-    """Scroll `canvas` on mouse wheel, but only while the cursor is over it —
-    keeps separate scrollable windows from stealing each other's scrolling.
-    Uses a small explicit scroll increment (20px/unit, 2 units per wheel
-    click = 40px) instead of Tkinter's default unit size, which can be
-    quite coarse and make fast-scrolled text look like it's jumping/
-    blurring together rather than scrolling smoothly."""
     canvas.configure(yscrollincrement=20)
 
     def _scroll(event):
@@ -1646,11 +1594,6 @@ def rounded_button_with_icon(canvas, x, y, w, h, text, icon_path, command, r=12,
 
 
 def autocrop_to_content(img):
-    """Trims transparent padding around the actual artwork. Two icon PNGs
-    fit to the same square can still look like different sizes if one has
-    more built-in transparent margin than the other — cropping to content
-    first makes the visible artwork consistent regardless of source padding.
-    No-ops harmlessly on fully-opaque images (portraits, JPEGs, etc.)."""
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     bbox = img.split()[-1].getbbox()
@@ -1658,11 +1601,6 @@ def autocrop_to_content(img):
 
 
 def fit_contain(img, w, h):
-    """Scales the image to fit ENTIRELY within (w, h) — no cropping — and
-    centers it on a transparent (w, h) canvas. Use this for symbol/glyph
-    icons (gender, element, etc.) where a non-square source must never get
-    its edges cut off. (For photo-style portraits, ImageOps.fit's crop-to-
-    fill is the better look — that's what make_rounded_photo still uses.)"""
     if img.mode != "RGBA":
         img = img.convert("RGBA")
     fitted = img.copy()
@@ -1673,14 +1611,6 @@ def fit_contain(img, w, h):
 
 
 def make_contained_photo(path, w, h, bg=(0, 0, 0, 0)):
-    """
-    Like make_rounded_photo, but scales the whole image to FIT within the
-    box (letterboxed, no cropping) instead of cropping to fill it. Used
-    where source images have inconsistent amounts of padding around the
-    actual artwork (e.g. potion icons) - cropping to fill would make
-    tightly-cropped source images look bigger than padded ones even at
-    the same box size; containing keeps them visually consistent.
-    """
     img = Image.open(path).convert("RGBA")
     img = autocrop_to_content(img)
     img.thumbnail((w, h), Image.LANCZOS)
@@ -1692,9 +1622,6 @@ def make_contained_photo(path, w, h, bg=(0, 0, 0, 0)):
 
 
 def make_rounded_photo(path, w, h, radius=16):
-    """Loads an image, crops it to fill the target box at the correct aspect
-    ratio (no stretching/squishing), and masks it to rounded corners.
-    Returns an ImageTk.PhotoImage (caller MUST keep a reference)."""
     img = Image.open(path).convert("RGBA")
     img = autocrop_to_content(img)
     img = ImageOps.fit(img, (w, h), method=Image.LANCZOS, centering=(0.5, 0.5))
@@ -1707,7 +1634,6 @@ def make_rounded_photo(path, w, h, radius=16):
 
 def draw_pill(canvas, x, y, w, h, text, fill,
               text_fill=None, text_outline=None, font=(APP_FONT_FAMILY, 11, APP_FONT_WEIGHT), radius=None):
-    """Small rounded capsule used for coat pattern / coat color badges."""
     text_fill = text_fill or PALETTE["pill_text"]
     text_outline = text_outline or PALETTE["pill_outline"]
     r = radius if radius is not None else h / 2
@@ -1720,10 +1646,6 @@ def draw_pill(canvas, x, y, w, h, text, fill,
 
 
 def draw_legendary_pill(canvas, x, y, w, h, element, text="Legendary", font=None, radius=None):
-    """Fills a coat pill with the element's color-shift PNG from
-    assets/legendary_shifts/ instead of a flat color. Returns True on
-    success; False means no matching file was found and the caller
-    should fall back to a normal flat-color draw_pill() instead."""
     r = radius if radius is not None else int(h / 2)
     try:
         photo = make_rounded_photo(legendary_shift_path(element), int(w), int(h), radius=r)
@@ -1743,7 +1665,6 @@ def draw_legendary_pill(canvas, x, y, w, h, element, text="Legendary", font=None
 
 
 def draw_orb(canvas, cx, cy, r, color):
-    """Small glossy sphere icon, used for Element / Pupil rows."""
     canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
                         fill=color, outline=lighten(color, -50), width=2)
     canvas.create_oval(cx - r * 0.5, cy - r * 0.65, cx - r * 0.05, cy - r * 0.15,
@@ -1751,11 +1672,6 @@ def draw_orb(canvas, cx, cy, r, color):
 
 
 def try_icon(canvas, x, y, path, size=24):
-    """Try to draw a PNG icon centered at (x, y), cropped to content then
-    scaled to fit entirely within a square (no edge-cropping) so every icon
-    renders at a consistent size regardless of its source aspect ratio or
-    built-in padding. Returns True on success so the caller can fall back
-    to something else (emoji, orb, etc.) if the file isn't there."""
     try:
         img = Image.open(path).convert("RGBA")
         img = autocrop_to_content(img)
@@ -1769,7 +1685,6 @@ def try_icon(canvas, x, y, path, size=24):
 
 
 def draw_triangle(canvas, x, y, size, fill):
-    """Small disclosure-arrow icon for section headers."""
     canvas.create_polygon(x, y - size, x, y + size, x + size * 1.3, y,
                            fill=fill, outline="")
 
@@ -1805,8 +1720,6 @@ def draw_row_icon(canvas, x, y, label, icon_value):
 
 
 def draw_trait_row(canvas, x, y, w, h, trait_entry, accent_color):
-    """One row inside the Genetic Traits section: a tier badge + trait name,
-    or an 'Empty Slot' placeholder if that slot isn't filled."""
     round_rect(canvas, x, y, x + w, y + h, r=10, fill=PALETTE["row_fill"], outline="", width=0)
     if trait_entry and trait_entry.get("Trait"):
         tier = trait_entry.get("Tier", 1)
@@ -2836,18 +2749,6 @@ def get_quick_trait_maps():
 
 
 def _canon(raw, options):
-    """
-    Case-insensitively matches `raw` against a list of canonical names,
-    trying exact match, then prefix match, then substring match (in that
-    order). Returns (value, matched):
-      - matched=True  -> value is the real canonical name, correct case
-                          (e.g. "pulsar" -> "Pulsar")
-      - matched=False -> nothing on the list matched at all (a typo, or
-                          a value the wiki hasn't added yet); value falls
-                          back to raw.title() so it's at least displayed
-                          with sensible capitalization rather than staying
-                          however the user happened to type it
-    """
     if not raw:
         return raw, True
     raw_lower = raw.lower()
@@ -2862,15 +2763,6 @@ def _canon(raw, options):
 
 
 def _parse_quick_birthday(raw):
-    """
-    Parses a free-typed birthday (accepts YYYY/MM/DD or YYYY-MM-DD) and
-    enforces the exact same limits as the real birthday picker
-    (labeled_birthday_picker): no earlier than BIRTHDAY_MIN_YEAR, no
-    later than today. Returns (iso_string_or_None, ok) - ok=False means
-    the text was blank (fine) or actually invalid (out of range /
-    unparseable), so the caller can flag it rather than silently store
-    something like the year 457.
-    """
     raw = raw.strip()
     if not raw:
         return None, True
@@ -3444,17 +3336,10 @@ def open_theme_manager(parent_win):
 
 
 def sidebar_font_size(w, base_w=350, base_size=13, min_size=9, max_size=17):
-    """Scales a button's font size proportionally to its actual current
-    width, so sidebar text grows/shrinks with the window instead of
-    staying frozen at one size regardless of how much room it has."""
     return max(min_size, min(max_size, round(base_size * w / base_w)))
 
 
 def compact_btn_width(text, w, base_size, has_icon, icon_h, full_w):
-    """In Compact Mode, sidebar buttons should all match the width spanned
-    by two dragon cards side-by-side (150px cards + grid padding),
-    matching the card grid below them. Returns full_w unchanged when
-    Compact Mode is off."""
     if not global_settings.get("CompactMode", False):
         return full_w
     TWO_CARD_WIDTH = 150 * 2 + 8 * 3
@@ -3462,12 +3347,6 @@ def compact_btn_width(text, w, base_size, has_icon, icon_h, full_w):
 
 
 def flex_button_canvas(parent, height, draw_fn, pady=(0, 4), padx=14):
-    """
-    A canvas that fills the width of its parent (instead of a fixed
-    352px) and re-invokes draw_fn(canvas, current_width) any time it's
-    resized - draw_fn is responsible for clearing ("delete") and
-    redrawing its own content at the new width.
-    """
     c = tk.Canvas(parent, height=height, bg=PALETTE["lair_bg"], highlightthickness=0)
     c.pack(fill="x", padx=padx, pady=pady)
 
@@ -4094,10 +3973,6 @@ def custom_dragon_image_path(dragon_id):
 
 
 def import_dragon_custom_image(source, dragon_id):
-    """Copies and resizes a user-chosen image into assets/dragon_images/
-    at a consistent 200x200 max, preserving transparency. `source` can be
-    a file path (str) or an already-loaded PIL Image (e.g. from a
-    clipboard paste). Returns the destination path, or None on failure."""
     try:
         img = source if isinstance(source, Image.Image) else Image.open(source)
         img = img.convert("RGBA")
@@ -4134,9 +4009,6 @@ def cosmetic_trait_icon_path(trait):
 
 
 def make_element_picker(parent, initial=None):
-    """Searchable, scrollable grid of click-to-select element icons. Looks for
-    a matching PNG in assets/icons/ (e.g. assets/icons/ice.png) and falls back
-    to a colored orb if no icon file has been dropped in yet."""
     wrap_outer = tk.Frame(parent, bg=PALETTE["bg_outer"])
     selected = {"value": initial or (ELEMENT_LIST[0] if ELEMENT_LIST else None)}
     cells = {}
@@ -4260,9 +4132,6 @@ def labeled_spinbox(parent, label_text, from_, to, default=1):
 
 
 def labeled_birthday_picker(parent, label_text, default_enabled=False, default_value=None):
-    """An optional Day/Month/Year birthday picker with an enable checkbox.
-    `default_value`, if given, is an ISO date string ('YYYY-MM-DD').
-    Returns (enabled_var, day_var, month_var, year_var, get_iso_or_none)."""
     wrap = labeled_field(parent, label_text)
 
     current_year = date.today().year
@@ -5269,10 +5138,6 @@ def _init_debug_log():
 
 
 def start():
-    """Shows a loading window immediately and does the wiki data fetch +
-    icon downloads in background threads, so the app never just sits
-    there invisible while it waits on the network - then hands off to
-    the real app window once everything is ready."""
 
     splash = tk.Tk()
     splash.title("Lairkeeper")
@@ -5306,10 +5171,6 @@ def start():
     splash._happy_icon_ref = None
 
     def try_show_happy_icon():
-        """Swaps the plain ':)' text for the real happy-face icon once
-        it's been downloaded (usually already true by the time this first
-        runs, since the UI icon fetch is small and started well before
-        the splash even appears)."""
         if splash._happy_icon_ref is not None:
             return
         path = os.path.join(MISC_DIR, "happy_icon.png")
@@ -5585,6 +5446,8 @@ def _start_main_app(root):
 
 if __name__ == "__main__":
     start()
+
+
 
 
 

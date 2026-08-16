@@ -1,37 +1,3 @@
-"""
-wiki_data.py
-------------
-Pulls the reference lists (Elements, Species, Materials, Pupils, Traits) live
-from the Dragon Adventures Fandom wiki, instead of hardcoding them in code.py.
-
-WHY THIS IS SEPARATE FROM code.py:
-Wiki page layouts drift over time (someone adds a column, renames a section,
-splits a table). Keeping the scraping logic in one small module means that
-when the wiki changes, you fix parsing in ONE place instead of hunting
-through a 5000-line app.
-
-HOW IT WORKS:
-1. Ask the MediaWiki API for the raw wikitext of a page (action=parse,
-   prop=wikitext) - this is the same markup editors see, before it's
-   rendered to HTML, so it's much easier to parse reliably than scraping
-   rendered HTML/CSS.
-2. Split that wikitext into "== Section ==" chunks so we can match a wiki
-   section (e.g. "Winter", "Special") to the part of the app that wants it.
-3. Inside each section, find every {| ... |} wikitable and pull out
-   whichever column(s) we care about (name, rarity, etc.), stripping wiki
-   markup like [[links]], refs, and bold/italics down to plain text.
-
-IMPORTANT - PLEASE READ:
-I was not able to browse the live rendered wiki pages while writing this
-(the site's bot-protection blocked automated fetches from where I was
-working), so the SECTION_MAP / column indices below are my best-guess
-based on how these wiki pages are normally structured, NOT a verified
-match against the current page source. Run `python wiki_data.py` on its
-own first - it prints exactly what it parsed from each page. If a list
-comes back empty or wrong, the section heading or column index for that
-page needs adjusting (marked with `# ADJUST ME` below); paste me the
-printed output and I'll fix the mapping.
-"""
 
 import re
 import sys
@@ -43,7 +9,6 @@ TIMEOUT = 15
 
 
 def fetch_wikitext(page_title):
-    """Return the raw wikitext of a page via the MediaWiki API."""
     params = {
         "action": "parse",
         "page": page_title,
@@ -61,7 +26,6 @@ def fetch_wikitext(page_title):
 
 
 def clean_wikitext(text):
-    """Strip common wiki markup down to plain display text."""
     if text is None:
         return ""
     text = re.sub(r"<ref[^>]*/?>.*?(</ref>)?", "", text, flags=re.DOTALL)
@@ -76,8 +40,6 @@ def clean_wikitext(text):
 
 
 def split_sections(wikitext):
-    """Split a page's wikitext into sections keyed by heading text, using
-    lines like == Heading == as the delimiter."""
     sections = {"__lead__": ""}
     current = "__lead__"
     for line in wikitext.splitlines():
@@ -91,17 +53,10 @@ def split_sections(wikitext):
 
 
 def extract_wikitables(text):
-    """Return a list of raw {| ... |} table blocks found in `text`."""
     return re.findall(r"\{\|.*?\n\|\}", text, flags=re.DOTALL)
 
 
 def extract_image_names(text):
-    """
-    Fallback for gallery/swatch-style pages: pull the base filename out of
-    every [[File:Name.ext|...]] or [[Image:Name.ext|...]] link. Many Fandom
-    reference pages (element/material/pupil swatch grids) are built this
-    way instead of as plain text tables, so the filename IS the item name.
-    """
     names, seen = [], set()
     for m in re.finditer(r"\[\[(?:File|Image):([^|\]]+?)\.(?:png|jpg|jpeg|gif|webp)", text, flags=re.IGNORECASE):
         name = m.group(1).replace("_", " ").strip()
@@ -113,11 +68,6 @@ def extract_image_names(text):
 
 
 def parse_table_rows(table_text):
-    """
-    Parse one wikitable into a list of rows, each row a list of cleaned
-    cell strings. Handles the common `|cell1 || cell2` and one-cell-per-line
-    ("|-" separated rows, "|" / "!" prefixed cells) styles.
-    """
     rows = []
     row_chunks = re.split(r"\n\|-", table_text)
     for chunk in row_chunks:
@@ -141,11 +91,6 @@ def parse_table_rows(table_text):
 
 
 def scrape_column(page_title, section=None, column=0, skip_header_rows=1):
-    """
-    Fetch `page_title`, optionally narrow to a section heading (exact match,
-    case-insensitive), and return the values in table `column` (0-indexed)
-    across every wikitable found, in order, de-duplicated.
-    """
     wikitext = fetch_wikitext(page_title)
     if section:
         sections = split_sections(wikitext)
@@ -171,9 +116,6 @@ def scrape_column(page_title, section=None, column=0, skip_header_rows=1):
 
 
 def fetch_html(page_title):
-    """Return the fully rendered HTML of a page (templates expanded) via
-    the MediaWiki API. Needed for pages built from templates/galleries that
-    don't show up as plain tables in raw wikitext."""
     params = {
         "action": "parse", "page": page_title, "prop": "text",
         "format": "json", "formatversion": "2",
@@ -193,11 +135,6 @@ def _soup(html):
 
 
 def html_section(soup, heading_keyword):
-    """
-    Return a list of HTML elements between a heading whose text contains
-    `heading_keyword` (case-insensitive) and the next heading of equal or
-    higher level - i.e. "everything under this section".
-    """
     headings = soup.find_all(re.compile(r"^h[1-4]$"))
     start = next((h for h in headings if heading_keyword.lower() in h.get_text().lower()), None)
     if start is None:
@@ -212,11 +149,6 @@ def html_section(soup, heading_keyword):
 
 
 def names_from_html_tables(elements_or_soup, name_col=0, extra_col_keyword=None):
-    """
-    Extract item names (and optionally a second attribute, e.g. rarity)
-    from every <table> found within the given HTML elements/soup. Falls
-    back to an <img alt/title> when a cell has no text (icon-only cells).
-    """
     tables = []
     for el in (elements_or_soup if isinstance(elements_or_soup, list) else [elements_or_soup]):
         if getattr(el, "name", None) == "table":
@@ -252,8 +184,6 @@ def names_from_html_tables(elements_or_soup, name_col=0, extra_col_keyword=None)
 
 
 def names_from_html_gallery(elements_or_soup):
-    """Extract item names from Fandom gallery widgets (icon grids), using
-    each image's caption text or, failing that, its alt/title attribute."""
     items, seen = [], set()
     scope = elements_or_soup if isinstance(elements_or_soup, list) else [elements_or_soup]
     gallery_items = []
@@ -282,13 +212,6 @@ def names_from_html_gallery(elements_or_soup):
 
 
 def scrape_names_html(page_title, section=None, strip_suffix=None, exclude=()):
-    """
-    High-level helper: fetch rendered HTML for `page_title`, optionally
-    narrow to a section, and return item names from whichever of
-    tables/galleries actually has content. `strip_suffix` removes a
-    trailing word Fandom sometimes bakes into filenames (e.g. "Material").
-    `exclude` filters out known junk entries (nav icons, page title itself).
-    """
     soup = _soup(fetch_html(page_title))
     scope = html_section(soup, section) if section else soup
 
@@ -310,16 +233,6 @@ def scrape_names_html(page_title, section=None, strip_suffix=None, exclude=()):
 
 
 def load_colors():
-    """
-    Confirmed via --dump: two tables on this page.
-      Table 0 (255 rows): headers ['Color', 'Color Name', 'Hex Code'] -
-        column 0 is just an image swatch (no alt text), the real name is
-        column 1 ("Color Name").
-      Table 1 (13 rows): headers [<img>, 'Error Color ID', ...] - same
-        pattern, name is column 1 ("Error Color ID", e.g. "Error: 2F1B1C").
-    A gallery elsewhere on the page also has "Error ..." captions, but
-    that's an unrelated thumbnail grid, not this data - ignored here.
-    """
     soup = _soup(fetch_html("Colors"))
     names, seen = [], set()
     for table in soup.find_all("table"):
@@ -344,14 +257,6 @@ def load_colors():
 
 
 def load_special_element_potions():
-    """
-    "Special Element Potions" is a real, distinct section on the Potions
-    page (confirmed via the page's own table of contents), separate from
-    Premium Shop/merch potions that also happen to grant elements - only
-    this section's potions should count toward Elemental progress.
-    Table has an Icon column before Name (same pattern as Traits), so the
-    name column is detected by header text rather than assumed to be 0.
-    """
     soup = _soup(fetch_html("Potions"))
     scope = html_section(soup, "Special Element Potions")
     names, seen = [], set()
@@ -381,13 +286,6 @@ def load_special_element_potions():
 
 
 def load_elements():
-    """
-    Every element on the page is defined by an {{NElement|...}},
-    {{EElement|...}}, {{SElement|...}}, or {{OElement|...}} template
-    call with an `el = Name` parameter - e.g. `{{NElement|el = Fire|...}}`.
-    Reading raw wikitext and pulling that parameter directly is far more
-    reliable here than trying to parse the rendered tabber/gallery HTML.
-    """
     wikitext = fetch_wikitext("Elements")
     names, seen = [], set()
     for m in re.finditer(r"\|\s*el\s*=\s*([^\n|}]+)", wikitext):
@@ -407,11 +305,6 @@ def load_pupils():
 
 
 def fetch_category_members(category, namespace=0, limit=500):
-    """
-    Return page titles belonging to a wiki category, e.g. 'Dragons' for
-    Category:Dragons - one page per dragon species. This sidesteps table
-    parsing entirely, which is much more robust than guessing table shape.
-    """
     titles = []
     cmcontinue = None
     while True:
@@ -440,38 +333,27 @@ SPECIES_CATEGORY_JUNK = {
 }
 
 
-def load_species(with_rarity=True):
-    """
-    Returns (SPECIES_LIST, SPECIES_RARITY_dict). Species names come from
-    Category:Dragons page titles (one wiki page per dragon), which is much
-    more reliable than trying to parse a single giant table. A few known
-    non-species pages (galleries, category-organization pages) get tagged
-    under this category by mistake on the wiki and are filtered out here.
+RARITY_CATEGORIES = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Relic"]
 
-    If with_rarity=True, this also opens each species' own page and pulls
-    a "Rarity" value out of its infobox - that's one extra API call per
-    species (~200+ calls), so it's slower. Set with_rarity=False for a
-    quick species-name-only run.
-    """
-    species = sorted(m for m in fetch_category_members("Dragons") if m not in SPECIES_CATEGORY_JUNK)
+
+def load_species_rarity():
     rarity = {}
-    if with_rarity:
-        for name in species:
-            try:
-                wikitext = fetch_wikitext(name)
-                m = re.search(r"\|\s*rarity\s*=\s*([^\n|}]+)", wikitext, flags=re.IGNORECASE)
-                if m:
-                    rarity[name] = clean_wikitext(m.group(1))
-            except Exception:
-                continue
+    for r in RARITY_CATEGORIES:
+        try:
+            for name in fetch_category_members(f"Rarity: {r}"):
+                rarity[name] = r
+        except Exception as e:
+            print(f"[wiki_data] rarity category '{r}' failed: {e}")
+    return rarity
+
+
+def load_species(with_rarity=True):
+    species = sorted(m for m in fetch_category_members("Dragons") if m not in SPECIES_CATEGORY_JUNK)
+    rarity = load_species_rarity() if with_rarity else {}
     return species, rarity
 
 
 def load_cosmetic_traits_from_category():
-    """Alternate/supplementary source: individual cosmetic traits that
-    have their own wiki page (e.g. "Melanism Cosmetic Trait"). Only
-    covers a subset (~15) compared to the Traits page table (~90+), kept
-    here in case it's useful for cross-checking."""
     titles = fetch_category_members("Cosmetic Traits")
     names, seen = [], set()
     for t in titles:
@@ -483,8 +365,6 @@ def load_cosmetic_traits_from_category():
 
 
 def find_section(sections, keyword):
-    """Return the content of the first section whose heading contains
-    `keyword` (case-insensitive) - fuzzier than an exact-match lookup."""
     for heading, content in sections.items():
         if keyword.lower() in heading.lower():
             return content
@@ -503,9 +383,6 @@ def _tables_in_section(soup, heading_keyword):
 
 
 def _name_column_index(table, header_label="trait"):
-    """Find which column holds the item name by matching the header text
-    (e.g. the Traits page puts 'Icon' before 'Trait', so name is column 1,
-    not 0) - safer than assuming a fixed position."""
     rows = table.find_all("tr")
     if not rows:
         return 0
@@ -514,12 +391,6 @@ def _name_column_index(table, header_label="trait"):
 
 
 def load_cosmetic_traits():
-    """
-    Cosmetic traits live in the "Cosmetic Traits" section of the Traits
-    page, across several tables (non-event / season / event / premium).
-    Column 0 is an icon, so the name is whichever column is headed
-    "Trait" (found dynamically, not assumed).
-    """
     soup = _soup(fetch_html("Traits"))
     names, seen = [], set()
     for table in _tables_in_section(soup, "Cosmetic Traits"):
@@ -535,12 +406,6 @@ def load_cosmetic_traits():
 
 
 def load_positive_negative_traits():
-    """
-    Genetic traits live in the "Genetic Traits" section of the Traits
-    page as exactly two tables: one with "Buff" columns (positive traits)
-    and one with "Debuff" columns (negative traits) - detected by header
-    text rather than assumed table order.
-    """
     soup = _soup(fetch_html("Traits"))
     positive, negative = [], []
     for table in _tables_in_section(soup, "Genetic Traits"):
@@ -578,24 +443,6 @@ _FALLBACK = {
 
 
 def load_sda_excluded():
-    """
-    Parses the Achievements page's Trivia section for sentences listing
-    dragons that don't count toward the Supreme/Ultimate Dragon Adventurer
-    achievement titles, and returns their names as a set.
-
-    I couldn't fetch this page's raw content directly while writing this
-    (same bot-blocking as elsewhere), so this is built from search-engine
-    snippets rather than a verified full page dump - specifically this
-    real sentence I did see: "Riyu, the Mountain Dragon, the Source
-    Dragon of Energy, and the Source Dragon of Motion do not count toward
-    either the Ultimate Dragon Adventurer or the Supreme Dragon
-    Adventurer achievement titles...". The match is intentionally broad
-    (any Trivia sentence mentioning "Adventurer" plus "count"/"exclud") to
-    also catch dragons mentioned in separate sentences (e.g. Shard/Flame),
-    but please sanity-check the actual returned set against the live page
-    before trusting it blindly - run wiki_data.py directly and check the
-    printed SDA_EXCLUDED output.
-    """
     wikitext = fetch_wikitext("Achievements")
     sections = split_sections(wikitext)
     trivia = find_section(sections, "trivia") or wikitext
@@ -613,15 +460,6 @@ def load_sda_excluded():
 
 
 def load_all(verbose=True, cache_path="wiki_data_cache.json"):
-    """
-    Fetch every list live from the wiki. On any individual failure, fall
-    back to the last successful fetch (cached on disk) rather than
-    crashing or dropping to a near-empty default - so a single flaky
-    launch doesn't nuke your dropdowns down to 3 items.
-
-    Cache file lives next to this script by default; pass cache_path=None
-    to disable caching entirely.
-    """
     import json
     import os
     from datetime import datetime, timezone
@@ -673,7 +511,7 @@ def load_all(verbose=True, cache_path="wiki_data_cache.json"):
     if "Legendary" not in result["COLOR_LIST"]:
         result["COLOR_LIST"] = result["COLOR_LIST"] + ["Legendary"]
     result["SPECIES_LIST"], result["SPECIES_RARITY"] = \
-        safe("species", lambda: load_species(with_rarity=False))
+        safe("species", lambda: load_species(with_rarity=True))
     result["COSMETIC_TRAIT_LIST"] = safe("cosmetic_traits", load_cosmetic_traits)
     result["POSITIVE_TRAIT_LIST"], result["NEGATIVE_TRAIT_LIST"] = \
         safe("traits", load_positive_negative_traits)
@@ -759,5 +597,7 @@ if __name__ == "__main__":
         import json
         print("\n--- FULL OUTPUT ---")
         print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
 
 
